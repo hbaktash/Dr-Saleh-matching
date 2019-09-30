@@ -128,12 +128,12 @@ def sub_graph(adj_mat, v, take_zeros=False):
     return sub_adj, len(sub_adj_with_zeros), len(sub_adj)
 
 
-def edit_distance(g1, g2, max_iter):
-    # return edit_distance_exact(g1, g2)
-    # return edit_distance_iterative(g1, g2, max_iter)
-    # return ed_assignment_approx(g1, g2)
-    # return ed_spectral_approx(g1, g2)
-    return my_ed_approx(g1, g2)
+# def edit_distance(g1, g2, max_iter):
+#     # return edit_distance_exact(g1, g2)
+#     # return edit_distance_iterative(g1, g2, max_iter)
+#     # return ed_assignment_approx(g1, g2)
+#     # return ed_spectral_approx(g1, g2)
+#     return my_ed_approx(g1, g2)
 
 
 def bfs_ed(full_g1 : numpy.ndarray, D1, v1, full_g2: numpy.ndarray, D2, v2):
@@ -174,153 +174,68 @@ def inside_cost(full_g1: numpy.ndarray, v1_neighs, full_g2: numpy.ndarray, v2_ne
     return numpy.sum(cost_mat[row_ind, col_ind])
 
 
-def my_ed_approx(g1, g2):
-    graph1 = networkx.from_numpy_matrix(g1)
-    graph2 = networkx.from_numpy_matrix(g2)
-    c_e1 = []
-    c_e2 = []
-    for c in networkx.connected_components(graph1):
-        c_e1.append((len(c), len(networkx.edges(graph1, c))))
-    for c in networkx.connected_components(graph2):
-        c_e2.append((len(c), len(networkx.edges(graph2, c))))
-    return my_component_distance(c_e1, c_e2)
-
-
-def my_component_distance(c_e1, c_e2):
-    c_e1, c_e2 = iso_size_and_sort(c_e1, c_e2)
-    dist = 0
-    for i in range(len(c_e1)):
-        dist += abs(c_e1[i][0] - c_e2[i][0]) + abs(c_e1[i][1] - c_e2[i][1])
-    return dist
-
-
-def iso_size_and_sort(c_e1, c_e2):
-    if len(c_e1) < len(c_e2):
-        x = c_e2.copy()
-        c_e2 = c_e1
-        c_e1 = x
-    for i in range(len(c_e1) - len(c_e2)):
-        c_e2.append((0, 0))
-    c_e1 = sorted(c_e1, key=lambda x: (x[0], x[1]))
-    c_e2 = sorted(c_e2, key=lambda x: (x[0], x[1]))
-    return c_e1, c_e2
-
-
 def edit_distance_exact(g1, g2):
     return networkx.graph_edit_distance(networkx.from_numpy_matrix(g1), networkx.from_numpy_matrix(g2))
 
 
-def edit_distance_iterative(g1, g2, max_iter):
-    # print("-- in edit distance\n")
-    graph_x_1 = networkx.from_numpy_matrix(g1)
-    graph_x_2 = networkx.from_numpy_matrix(g2)
-    gen = networkx.optimize_graph_edit_distance(graph_x_1, graph_x_2)
-    i = 0
-    min_ed = 0
-    last_val = 0
-    t1 = 0
-    t2 = 0
-    for val in gen:
-        if i >= max_iter:
-            break
-        # print("new val: ", val)
-        t1 = time.time()
-        if i > 0:
-            if abs(t2 - t1) >= 0.02:
-                break
-        t2 = t1
-        min_ed = val
-        i += 1
-    return min_ed
+def compute_cost_matrix(sorted_g1, sorted_g2, k):
+    cost_mat = numpy.zeros((k, k))
+    vectors1 = [deg_seq_vector(sorted_g1, i) for i in range(len(sorted_g1) - k, len(sorted_g1))]
+    vectors2 = [deg_seq_vector(sorted_g2, i) for i in range(len(sorted_g1) - k, len(sorted_g2))]
 
-
-def ed_assignment_approx(g1, g2):
-    n1 = len(g1)
-    n2 = len(g2)
-    # print("size g1 g2: ", n1," ", n2)
-    if n1 == 0:
-        return n2 + (numpy.sum(g2) / 2)
-    elif n2 == 0:
-        return n1 + (numpy.sum(g1) / 2)
-    else:
-        cols = numpy.zeros(n1 + n2)
-        cols[:n1] = range(n1)
-        cols[n1:] -= 1
-        rows = numpy.zeros(n1 + n2)
-        rows[:n2] = range(n2)
-        rows[n2:] -= 1
-        cost_matrix = numpy.array([[node_map_cost_approx(i, j, g1, g2) for j in range(n2)] for i in range(n1)])
-        rowInd, colInd = solve_cost_matrix(cost_matrix, True)
-        cost_sum = numpy.sum(cost_matrix[numpy.ix_(rowInd, colInd)])
-    return cost_sum
-
-
-def node_map_cost_approx(u, v, g1, g2):
-    if (u == -1) & (v == -1):
-        return 0
-    elif u == -1:
-        return 1 + (numpy.sum(g2[:, v]) / 2)
-    elif v == -1:
-        return 1 + (numpy.sum(g1[:, u]) / 2)
-    else:
-        return 1 + abs(numpy.sum(g1[:, u]) - numpy.sum(g2[:, v])) / 2
-
-
-def ed_spectral_approx(g1, g2):
-    D1 = numpy.diag(numpy.sum(g1, axis=1))
-    D2 = numpy.diag(numpy.sum(g2, axis=1))
-    # print(g1)
-    # print(g2)
-    laplacian_1 = D1 - g1
-    laplacian_2 = D2 - g2
-    w1, v1 = numpy.linalg.eig(laplacian_1)
-    w2, v2 = numpy.linalg.eig(laplacian_2)
-    w1 = numpy.array(w1)
-    w2 = numpy.array(w2)
-    w1 = numpy.array(sorted(w1, reverse=True))
-    w2 = numpy.array(sorted(w2, reverse=True))
-    sum1 = numpy.sum(w1)
-    sum2 = numpy.sum(w2)
-    s1 = 0
-    for i in range(len(w1)):
-        s1 += w1[i]
-        if s1 >= 0.9 * sum1:
-            s1 = i
-            break
-    s2 = 0
-    for j in range(len(w2)):
-        s2 += w2[j]
-        if s2 >= 0.9 * sum2:
-            s2 = j
-            break
-    k = min(s1, s2)
-    # print(k)
-    diff = numpy.sum((w1[:k] - w2[:k]) * (w1[:k] - w2[:k]))
-    return diff
-
-
-def compute_cost_matrix(sorted_g1, sorted_g2, k, max_iter, bfs_approach, have_zeros=False):
-    cost_mat1 = numpy.zeros((k, k))
-    cost_mat2 = numpy.zeros((k, k))
     for i in range(k):
         for j in range(k):
-            # print("i, j = ",i,",",j)
-            if not bfs_approach:
-                sub_g1, full_size_1, final_size_1 = sub_graph(sorted_g1, -(i + 1), have_zeros)
-                sub_g2, full_size_2, final_size_2 = sub_graph(sorted_g2, -(j + 1), have_zeros)
-                cost = edit_distance(sub_g1, sub_g2, max_iter) + (
-                    (abs(full_size_1 - full_size_2) - abs(final_size_1 - final_size_2)) if (
-                                abs(full_size_1 - full_size_2) > abs(final_size_1 - final_size_2)) else 0)
-                cost_mat1[k - 1 - i, k - 1 - j] = cost
-            else:
-                cost_mat1[k - 1 - i, k - 1 - j] = bfs_ed(sorted_g1, numpy.sum(sorted_g1, axis=0), -(i+1), sorted_g2,
-                                                         numpy.sum(sorted_g2, axis=0), -(j+1))[0]
-                cost_mat2[k - 1 - i, k - 1 - j] = bfs_ed(sorted_g1, numpy.sum(sorted_g1, axis=0), -(i + 1), sorted_g2,
-                                                         numpy.sum(sorted_g2, axis=0), -(j + 1))[1]
-    return cost_mat1, cost_mat2
+            cost_mat[k - 1 - i, k - 1 - j] = vector_distance(vectors1[-(i+1)], vectors2[-(j+1)])
+    return cost_mat
 
 
-def produce_and_match_with_ed(n, edges, s, k, max_iter, bfs_approach, have_zeros=False):
+def vector_distance(v, u):
+    if len(v) < len(u):
+        t = u
+        u = v
+        v = t
+    sum2 = 0
+    for i in range(len(u)):
+        sum2 += (v[i]-u[i])**2
+    return math.sqrt(sum2)
+
+
+def degree_seq_distance(full_g1 : numpy.ndarray, v1, full_g2: numpy.ndarray, v2):
+    vec1 = deg_seq_vector(full_g1, v1)
+    # print(vec1)
+    vec2 = deg_seq_vector(full_g2, v2)
+    # print(vec2)
+    return vector_distance(vec1, vec2)
+
+
+def deg_seq_vector(g : numpy.ndarray, v, max_level = 3):
+    vector = [1]
+    marked = numpy.zeros(len(g))
+    bfs_q = [(v,0)]
+    marked[v] = 1
+    last_depth = 0
+    flag = False
+    while len(bfs_q) > 0:
+        if flag:
+            break
+        node = bfs_q[0]
+        bfs_q = bfs_q[1:]
+        if node[1] > last_depth:
+            last_depth = node[1]
+            vector.append(len(bfs_q) + 1)
+        for i in range(len(g)):
+            if marked[i] == 0 and g[node[0],i] == 1:
+                marked[i] = 1
+                if node[1] == max_level:
+                    flag = True
+                    vector.append(len(bfs_q)+1)
+                    break
+                bfs_q.append((i, node[1] + 1))
+    # print(vector)
+    return vector
+
+
+def produce_and_match_with_ed(n, edges, s, k):
     print("producing g1 g2")
     g1, g2 = produce_g1_g2(n, edges, s)
     print("sorting degs: ")
@@ -328,20 +243,13 @@ def produce_and_match_with_ed(n, edges, s, k, max_iter, bfs_approach, have_zeros
     print("---------------------------------")
     print("computing cost matrix...")
     #TODO
-    cost_matrix1, cost_matrix2 = compute_cost_matrix(g1_sorted, g2_sorted, k, max_iter, bfs_approach, have_zeros)
+    cost_matrix = compute_cost_matrix(g1_sorted, g2_sorted, k)
     print("solving cost matrix: ")
-    cost_matrix3 = cost_matrix1+cost_matrix2
-    rowInd1, colInd1 = solve_cost_matrix(cost_matrix1, True)
-    rowInd2, colInd2 = solve_cost_matrix(cost_matrix2, True)
-    rowInd3, colInd3 = solve_cost_matrix(cost_matrix3, True)
-    colInd1 = numpy.array(colInd1 + (n - k))
-    diff1 = colInd1 - correct_perm[-k:]
-    colInd2 = numpy.array(colInd2 + (n - k))
-    diff2 = colInd2 - correct_perm[-k:]
-    colInd3 = numpy.array(colInd3 + (n - k))
-    diff3 = colInd3 - correct_perm[-k:]
+    rowInd, colInd = solve_cost_matrix(cost_matrix, True)
+    colInd = numpy.array(colInd + (n - k))
+    diff = colInd - correct_perm[-k:]
     max_matchable = int(numpy.sum(correct_perm[-k:] >= n - k))
-    return diff1, diff2, diff3, max_matchable
+    return diff, max_matchable
 
 
 def barPlotDiffs(data_pairs):
@@ -354,34 +262,26 @@ def barPlotDiffs(data_pairs):
     return matches, maxes
 
 
-def test_ed_with_high_degs(n, m, p, s, k, max_iter, bfs_approach, have_zeros=False):
+def test_ed_with_high_degs(n, m, p, s, k):
     stats0 = numpy.zeros(m)
     stats1 = numpy.zeros(m)
-    stats2 = numpy.zeros(m)
-    stats3 = numpy.zeros(m)
     from_max_stats = [[0, 0]] * (k + 1)
     # print(from_max_stats)
     for i in range(m):
         print("^^^^^^^^^^^^^^^^^^^^^^^^^^^")
         print("trial # ", i)
         edges = initial_graph(n, p)
-        diff1, diff2, diff3, max = produce_and_match_with_ed(n, edges, s, k, max_iter, bfs_approach, have_zeros)
+        diff1, max = produce_and_match_with_ed(n, edges, s, k)
         match_percentage1 = numpy.sum(diff1 == 0) / k
-        match_percentage2 = numpy.sum(diff2 == 0) / k
-        match_percentage3 = numpy.sum(diff3 == 0) / k
-        stats3[i] = max / k
         stats0[i] = match_percentage1
-        stats1[i] = match_percentage2
-        stats2[i] = match_percentage3
-        print("match1          = ", match_percentage1)
-        print("match2          = ", match_percentage2)
-        print("match3          = ", match_percentage3)
+        stats1[i] = max / k
+        print("match1        = ", match_percentage1)
         print("max matchable = ", max / k)
         print(max)
         from_max_stats[max][0] = from_max_stats[max][0] + match_percentage1
         from_max_stats[max][1] = from_max_stats[max][1] + 1
     # matches, maxes = barPlotDiffs(from_max_stats)
-    return stats0, stats1, stats2, stats3
+    return stats0, stats1
 
 
 def solve_cost_matrix(cost_mat, greedyHungarianNot):
@@ -391,48 +291,36 @@ def solve_cost_matrix(cost_mat, greedyHungarianNot):
         return scipy.optimize.linear_sum_assignment(cost_mat)
 
 
-def ed_match_test():
+def ds_match_test():
     n = int(input("graph size : "))
     m = int(input("trials : "))
-    MAX_ITER = int(input("maximum ED iterations: "))
     p = (2 * math.log(n, math.e)) / n
     print("p = ", p)
-    l = float(input("multiply p (    p = (2 * math.log(n, math.e)) / n) by: "))
+    l = float(input("multiply p (p = 2*log(n)/n) by: "))
     print(p * l)
     p *= l
     s = float(input("s = "))
     k = int(input("number of high degs up to: "))
-    bfs_approach = bool(int(input("go bfs approach?(0 \ 1)")))
     # have_zeros = True if int(input("have isolated nodes?(1,0)")) == 1 else False
-    stats = [[],[],[],[]]
+    stats = [[],[]]
     for s in frange(1,0.9,-0.01):
         if(s != 1):
             print("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^")
             print("s = ", s)
-            match_stats1, match_stats2, match_stats3, max_matchable_stats = test_ed_with_high_degs(n, m, p, s, k, MAX_ITER,bfs_approach)
+            match_stats1, max_matchable_stats = test_ed_with_high_degs(n, m, p, s, k)
             stats[0].append(numpy.average(match_stats1))
-            stats[1].append(numpy.average(match_stats2))
-            stats[2].append(numpy.average(match_stats3))
-            stats[3].append(numpy.average(max_matchable_stats))
-            # hist, bin = numpy.histogram(match_stats)
-            # print("hist and bin\n", hist, "\n", bin)
-            # print("average matches = ", numpy.average(match_stats))
-            # print("average max matches = ", numpy.average(max_matchable_stats))
+            stats[1].append(numpy.average(max_matchable_stats))
         else:
             stats[0].append(1)
             stats[1].append(1)
-            stats[2].append(1)
-            stats[3].append(1)
     stats[0].reverse()
     stats[1].reverse()
-    stats[2].reverse()
-    stats[3].reverse()
-    l1, = plt.plot(numpy.linspace(0.9,1,10), stats[0], 'b' , label='inside degs')
-    l2, = plt.plot(numpy.linspace(0.9,1,10), stats[1], 'r', label='outside degs')
-    l3, = plt.plot(numpy.linspace(0.9,1,10), stats[2], 'c' , label='in + out')
-    l4, = plt.plot(numpy.linspace(0.9,1,10), stats[3], 'g', label='max')
-    plt.legend(handles=[l1, l2, l3, l4])
+    print(stats[0])
+    print(stats[1])
+    l1, = plt.plot(numpy.linspace(0.9,1,10), stats[0], 'b' , label='deg seq')
+    l2, = plt.plot(numpy.linspace(0.9,1,10), stats[1], 'r', label='max matchable')
+    plt.legend(handles=[l1,l2])
     plt.show()
 
 numpy.set_printoptions(precision=3)
-ed_match_test()
+ds_match_test()
